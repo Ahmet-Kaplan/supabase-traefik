@@ -47,6 +47,8 @@ services:
       NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
       # Uncomment to use Big Query backend for analytics
       # NEXT_ANALYTICS_BACKEND_PROVIDER: bigquery
+    networks:
+      - supabase
 
   kong:
     container_name: supabase-kong
@@ -54,9 +56,6 @@ services:
     restart: unless-stopped
     # https://unix.stackexchange.com/a/294837
     entrypoint: bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
-    ports:
-      - ${KONG_HTTP_PORT}:8000/tcp
-      - ${KONG_HTTPS_PORT}:8443/tcp
     depends_on:
       analytics:
         condition: service_healthy
@@ -148,6 +147,7 @@ services:
 
     networks:
       - supabase
+      - traefik-public
 
 # ----------------------------------------------------------------------------------------------------------------------------------------------------------------- #
 
@@ -215,7 +215,7 @@ services:
       API_JWT_SECRET: ${JWT_SECRET}
       FLY_ALLOC_ID: fly123
       FLY_APP_NAME: realtime
-      SECRET_KEY_BASE: UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq
+      SECRET_KEY_BASE: UpNVntn3cDxT1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oqHJpq99YMc1
       ERL_AFLAGS: -proto_dist inet_tcp
       ENABLE_TAILSCALE: "false"
       DNS_NODES: "''"
@@ -263,8 +263,15 @@ services:
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
       TENANT_ID: stub
       # TODO: https://github.com/supabase/storage-api/issues/55
-      REGION: stub
+      REGION: eu-south #whatever your region is
       GLOBAL_S3_BUCKET: stub
+      GLOBAL_S3_ENDPOINT: https://storage.yourdomain.com
+      GLOBAL_S3_PROTOCOL: https 
+      AWS_DEFAULT_REGION: eu-south
+      #this next one seems important for minio
+      GLOBAL_S3_FORCE_PATH_STYLE: true
+      AWS_ACCESS_KEY_ID: your_s3_access_key
+      AWS_SECRET_ACCESS_KEY: your_secret_s3_access_key
       ENABLE_IMAGE_TRANSFORMATION: "true"
       IMGPROXY_URL: http://imgproxy:5001
     volumes:
@@ -385,10 +392,9 @@ services:
       # Uncomment to use Big Query backend for analytics
       # GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
       # GOOGLE_PROJECT_NUMBER: ${GOOGLE_PROJECT_NUMBER}
-    ports:
-      - 4000:4000
     networks:
       - supabase
+      - traefik-public
 
 # ----------------------------------------------------------------------------------------------------------------------------------------------------------------- #
 
@@ -411,9 +417,9 @@ services:
       - -c
       - log_min_messages=fatal # prevents Realtime polling queries from appearing in logs
     restart: unless-stopped
-    ports:
+#    ports:
       # Pass down internal port because it's set dynamically by other services
-      - ${POSTGRES_PORT}:${POSTGRES_PORT}
+#      - ${POSTGRES_PORT}:${POSTGRES_PORT}
     environment:
       POSTGRES_HOST: /var/run/postgresql
       PGPORT: ${POSTGRES_PORT}
@@ -438,6 +444,8 @@ services:
       - ./volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
     # Use named volume to persist pgsodium decryption key between restarts
       - db-config:/etc/postgresql-custom
+      # Use named volume to persist data between restarts
+      - supabase_db:/data/postgres
     networks:
       - supabase
 
@@ -473,8 +481,17 @@ services:
 # ----------------------------------------------------------------------------------------------------------------------------------------------------------------- #
 volumes:
   db-config:
+  supabase_db:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${VOLUME_POSTGRES_SUPABASE}
+      o: bind
     
 networks:
+  traefik-public:
+    external: true
+    name: ${NETWORK_TRAEFIK}
   supabase:
     driver: bridge
-    external: true
+    internal: true

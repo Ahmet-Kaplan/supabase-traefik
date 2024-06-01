@@ -1,3 +1,13 @@
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/ssl/traefik/cert.pem
+        keyFile: /etc/ssl/traefik/key.pem
+  certificates:
+    - certFile: /etc/ssl/traefik/cert.pem
+      keyFile: /etc/ssl/traefik/key.pem
+
 http:
   routers:
     ###############################################################################################################################################################################
@@ -9,6 +19,20 @@ http:
       rule: "Host(`traefik.$DOMAIN`)"
       service: traefik
       middlewares:
+        - "traefikDashboardAuth"
+        - "securityHeaders"
+      tls:
+        domains:
+          - main: "$DOMAIN"
+            sans:
+              - "*.$DOMAIN"
+    #Supabase Frontend routing
+    supabase-studio:
+      entryPoints:
+        - https
+      rule: "Host(`www.$DOMAIN`)"
+      service: supabase-studio
+      middlewares:
         - "securityHeaders"
 
     #Supabase Kong routing
@@ -16,6 +40,7 @@ http:
       entryPoints:
         - https
       rule: "Host(`studio.$DOMAIN`)"
+      tls: {}
       service: supabase-kong
       middlewares:
         - "securityHeaders"
@@ -25,6 +50,7 @@ http:
       entryPoints:
         - https
       rule: "Host(`analytics.$DOMAIN`)"
+      tls: {}
       service: supabase-analytics
       middlewares:
         - "securityHeaders"
@@ -37,20 +63,32 @@ http:
     traefik:
       loadBalancer:
         servers:
-          - url: http://$IPV4:8181
+          - url: http://traefik:8181
+    # Traefik
+    traefikDashboardAuth:
+      basicAuth:
+        usersFile: "/etc/traefik/htpasswd"
+        users:
+          - "{{env $TRAEFIK_DASHBOARD_USER}}:{{env $TRAEFIK_DASHBOARD_PWD}}"
+
+    # Supabase Frontend service
+    supabase-studio:
+      loadbalancer:
+        servers:
+          - url: "http://kong:3000"
 
     # Supabase Kong service
     supabase-kong:
       loadbalancer:
         servers:
-          - url: "http://IPv4:8000"
+          - url: "http://kong:8000"
 
 
     # Supabase Analytics service
     supabase-analytics:
       loadbalancer:
         servers:
-          - url: "http://IPv4:4000"
+          - url: "http://analytics:4000"
 
 
   ###############################################################################################################################################################################

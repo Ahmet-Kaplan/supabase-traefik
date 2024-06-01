@@ -40,7 +40,7 @@ providers:
   # Docker provider for connecting all apps that are inside of the docker network
   docker:
     watch: true
-    network: supabase
+    network: traefik-public
     # Default host rule to containername.domain.example
     defaultRule: "Host(`{{ lower (trimPrefix `/` .Name )}}.$DOMAIN`)"
     swarmModeRefreshSeconds: 15s
